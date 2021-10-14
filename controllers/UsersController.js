@@ -1,5 +1,7 @@
 import sha1 from 'sha1';
+import { ObjectId } from 'mongodb';
 import dbClient from '../utils/db';
+import redisClient from '../utils/redis';
 
 class UsersController {
   static async postNew(request, response) {
@@ -17,6 +19,22 @@ class UsersController {
     const pHashed = sha1(password);
     const res = await dbClient.DB.collection('users').insertOne({ email: `${email}`, password: `${pHashed}` });
     return response.status(201).send({ id: res.insertedId, email: `${email}` });
+  }
+
+  static async getMe(request, response) {
+    const authToken = request.header('X-Token');
+    if (!authToken) {
+      return response.status(401).send({ error: 'Unauthorized' });
+    }
+    const getToken = await redisClient.get(`auth_${authToken}`);
+    if (!getToken) {
+      return response.status(401).send({ error: 'Unauthorized' });
+    }
+    const getDoc = await dbClient.DB.collection('users').findOne({ _id: ObjectId(getToken) });
+    if (!getDoc) {
+      return response.status(401).send({ error: 'Unauthorized' });
+    }
+    return response.status(200).send({ id: getDoc._id, email: getDoc.email });
   }
 }
 
